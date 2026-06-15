@@ -13,6 +13,8 @@ pub struct VerifyResult {
     pub signer: Option<String>,
     #[serde(rename = "tarih", skip_serializing_if = "Option::is_none")]
     pub date: Option<DateTime<Utc>>,
+    #[serde(rename = "sertifika_gecerlilik", skip_serializing_if = "Option::is_none")]
+    pub cert_not_after: Option<DateTime<Utc>>,
     #[serde(rename = "hata", skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -144,6 +146,7 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
                 valid: false,
                 signer: None,
                 date: None,
+                cert_not_after: None,
                 error: Some(format!("imza doğrulama başarısız: {:?}", e)),
             });
         }
@@ -154,6 +157,7 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
     
     // 3. For each signer, verify its certificate chain to a root CA
     let mut signer_name = None;
+    let mut cert_not_after = None;
     for signer in p7.signers() {
         let (signer_issuer, signer_serial) = match signer.certificate_issuer_and_serial() {
             Some(val) => val,
@@ -162,6 +166,7 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
                     valid: false,
                     signer: None,
                     date: None,
+                    cert_not_after: None,
                     error: Some("İmzalayan sertifikasının yayıncı ve seri numarası bulunamadı".to_string()),
                 });
             }
@@ -183,6 +188,7 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
                     valid: false,
                     signer: None,
                     date: None,
+                    cert_not_after: None,
                     error: Some("İmzalayan sertifikası PKCS#7 paketi içinde bulunamadı".to_string()),
                 });
             }
@@ -193,12 +199,18 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
             signer_name = signer_cert.subject_common_name();
         }
 
+        // Get signer's certificate expiration time
+        if cert_not_after.is_none() {
+            cert_not_after = Some(signer_cert.validity_not_after());
+        }
+
         // Verify the certificate chain
         if let Err(e) = verify_chain(signer_cert, &p7, &roots) {
             return Ok(VerifyResult {
                 valid: false,
                 signer: signer_name,
                 date: None,
+                cert_not_after,
                 error: Some(format!("sertifika zinciri doğrulanamadı: {}", e)),
             });
         }
@@ -208,6 +220,7 @@ pub fn verify_timestamp(der_data: &[u8]) -> Result<VerifyResult, String> {
         valid: true,
         signer: signer_name,
         date: Some(Utc::now()),
+        cert_not_after,
         error: None,
     })
 }

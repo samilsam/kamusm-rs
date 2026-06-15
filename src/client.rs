@@ -55,7 +55,8 @@ pub fn send_timestamp_request(host: &str, identity: &str, der: &[u8]) -> Result<
 }
 
 /// Sends a credit balance check request to the KamuSM server.
-pub fn send_credit_request(host: &str, identity: &str, customer_id: u32, timestamp: u64) -> Result<(u16, String, Vec<u8>), String> {
+pub fn send_credit_request(host: &str, identity: &str, customer_id: u64, timestamp: u64) -> Result<(u16, String, Vec<u8>), String> {
+
     let client = build_client()?;
     let mut headers = common_headers(identity);
     

@@ -297,9 +297,43 @@ pub fn auto_update_certs() -> Result<(), String> {
             }
         }
     }
-    
     Ok(())
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct CertDetails {
+    #[serde(rename = "konu")]
+    pub subject: String,
+    #[serde(rename = "yayinlayan")]
+    pub issuer: String,
+    #[serde(rename = "baslangic_tarihi")]
+    pub not_before: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "bitis_tarihi")]
+    pub not_after: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "gecerli")]
+    pub is_valid: bool,
+}
+
+pub fn read_cert_details(bytes: &[u8]) -> Result<CertDetails, String> {
+    let cert = CapturedX509Certificate::from_pem(bytes)
+        .or_else(|_| CapturedX509Certificate::from_der(bytes.to_vec()))
+        .map_err(|e| format!("Sertifika dosyası ayrıştırılamadı (PEM veya DER formatı bekleniyordu): {:?}", e))?;
+
+    let subject = cert.subject_common_name().unwrap_or_else(|| "Bilinmeyen Konu".to_string());
+    let issuer = cert.issuer_common_name().unwrap_or_else(|| "Bilinmeyen Yayıncı".to_string());
+    let not_before = cert.validity_not_before();
+    let not_after = cert.validity_not_after();
+    let is_valid = cert.time_constraints_valid(None);
+
+    Ok(CertDetails {
+        subject,
+        issuer,
+        not_before,
+        not_after,
+        is_valid,
+    })
+}
+
 
 pub fn kamusm_root_cas() -> Vec<CapturedX509Certificate> {
     let mut certs = Vec::new();
@@ -383,6 +417,15 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], "dGVzdGNlcnQx");
         assert_eq!(parsed[1], "dGVzdGNlcnQy");
+    }
+
+    #[test]
+    fn test_read_cert_details() {
+        let details = read_cert_details(KAMUSM_ROOT_CA_V7.as_bytes()).unwrap();
+        assert!(details.subject.contains("Kamu SM Kök Sertifika"));
+        assert!(details.issuer.contains("Kamu SM Kök Sertifika"));
+        assert_eq!(details.not_before.format("%Y-%m-%d").to_string(), "2025-09-24");
+        assert_eq!(details.not_after.format("%Y-%m-%d").to_string(), "2035-09-22");
     }
 
     #[test]

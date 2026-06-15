@@ -4,7 +4,7 @@ use rand::RngCore;
 
 #[derive(Clone, Debug, der::Sequence)]
 pub struct EsyaReqEx<'a> {
-    pub user_id: u32,
+    pub user_id: u64,
     pub salt: OctetStringRef<'a>,
     pub iteration_count: u32,
     pub iv: OctetStringRef<'a>,
@@ -13,7 +13,8 @@ pub struct EsyaReqEx<'a> {
 
 /// Creates the identity header for KamuSM authentication.
 /// Returns a hex string of the DER-encoded ASN.1 structure.
-pub fn build_identity(customer_id: u32, password: &str, message_imprint: &[u8], iterations: i32) -> Result<String, String> {
+pub fn build_identity(customer_id: u64, password: &str, message_imprint: &[u8], iterations: i32) -> Result<String, String> {
+
     let mut iv = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut iv);
     let salt = iv;

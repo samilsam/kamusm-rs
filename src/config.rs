@@ -10,8 +10,9 @@ const CONFIG_SALT_PHRASE: &str = "kamusm-go-config-salt";
 pub struct ConfigData {
     pub sunucu: String,
     #[serde(rename = "musteriNo")]
-    pub musteri_no: u32,
+    pub musteri_no: u64,
     pub parola: String,
+
     pub hash: String,
     pub iterasyon: i32,
 }

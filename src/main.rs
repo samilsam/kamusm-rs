@@ -5,7 +5,8 @@ use kamusm_rs::{
     send_credit_request, send_timestamp_request,
     is_valid_timestamp_response, extract_pkcs7, extract_text_from_asn1,
     parse_credits_from_body, verify_timestamp, VERSION, config_path,
-    update_certs, auto_update_certs
+    update_certs, auto_update_certs, read_cert_details,
+    detect_pkcs11_module, list_eimza_tokens, read_eimza_certs, sign_eimza_data, sign_eimza_xml
 };
 use std::path::Path;
 use std::fs;
@@ -26,7 +27,7 @@ enum Commands {
     #[command(name = "kimlik")]
     Kimlik {
         #[arg(long = "musteri-no")]
-        musteri_no: Option<u32>,
+        musteri_no: Option<u64>,
         #[arg(long = "parola")]
         parola: Option<String>,
         #[arg(long = "ozet-hex")]
@@ -44,7 +45,7 @@ enum Commands {
         #[arg(long = "sunucu")]
         sunucu: Option<String>,
         #[arg(long = "musteri-no")]
-        musteri_no: Option<u32>,
+        musteri_no: Option<u64>,
         #[arg(long = "parola")]
         parola: Option<String>,
         #[arg(long = "dosya")]
@@ -66,7 +67,7 @@ enum Commands {
         #[arg(long = "sunucu")]
         sunucu: Option<String>,
         #[arg(long = "musteri-no")]
-        musteri_no: Option<u32>,
+        musteri_no: Option<u64>,
         #[arg(long = "parola")]
         parola: Option<String>,
         #[arg(long = "iterasyon", default_value_t = 100)]
@@ -90,7 +91,7 @@ enum Commands {
         #[arg(long = "sunucu")]
         sunucu: String,
         #[arg(long = "musteri-no")]
-        musteri_no: u32,
+        musteri_no: u64,
         #[arg(long = "parola")]
         parola: String,
         #[arg(long = "hash", default_value = "sha256")]
@@ -109,6 +110,49 @@ enum Commands {
     SertifikaGuncelle {
         #[arg(long = "zorla")]
         zorla: bool,
+    },
+    /// Sertifika dosyasının (.cer, .crt, .pem, .der) geçerlilik bilgilerini oku
+    #[command(name = "sertifika-oku")]
+    SertifikaOku {
+        #[arg(long = "dosya")]
+        dosya: String,
+        #[arg(long = "json")]
+        json: bool,
+    },
+    /// Takılı USB E-İmza (Akıllı Kart) bilgilerini ve sertifikalarını oku
+    #[command(name = "eimza-bilgi")]
+    EImzaBilgi {
+        /// PKCS#11 sürücü (.dll, .so, .dylib) kütüphane yolu
+        #[arg(long = "modul")]
+        modul: Option<String>,
+        /// Akıllı kart PIN kodu
+        #[arg(long = "pin")]
+        pin: Option<String>,
+        /// Çıktıyı JSON formatında ver
+        #[arg(long = "json")]
+        json: bool,
+    },
+    /// USB E-İmza (Akıllı Kart) ile dosya veya XML imzala
+    #[command(name = "eimza-imzala")]
+    EImzaImzala {
+        /// İmzalanacak dosya yolu
+        #[arg(long = "dosya")]
+        dosya: String,
+        /// XML Enveloped Signature (XML-DSig) olarak imzala
+        #[arg(long = "xml")]
+        xml: bool,
+        /// Çıktı dosya yolu (varsayılan: <dosya>_imzali.xml veya <dosya>.sig)
+        #[arg(long = "cikis")]
+        cikis: Option<String>,
+        /// Akıllı kart PIN kodu
+        #[arg(long = "pin")]
+        pin: Option<String>,
+        /// PKCS#11 sürücü (.dll, .so, .dylib) kütüphane yolu
+        #[arg(long = "modul")]
+        modul: Option<String>,
+        /// Sonucu JSON formatında ver
+        #[arg(long = "json")]
+        json: bool,
     },
 }
 
@@ -170,12 +214,21 @@ fn main() {
         Commands::SertifikaGuncelle { zorla } => {
             run_update_certs(zorla);
         }
+        Commands::SertifikaOku { dosya, json } => {
+            run_read_cert(dosya, json);
+        }
+        Commands::EImzaBilgi { modul, pin, json } => {
+            run_eimza_info(modul, pin, json);
+        }
+        Commands::EImzaImzala { dosya, xml, cikis, pin, modul, json } => {
+            run_eimza_sign(dosya, xml, cikis, pin, modul, json);
+        }
     }
 }
 
 fn apply_config_defaults(
     sunucu: &mut Option<String>,
-    musteri_no: &mut Option<u32>,
+    musteri_no: &mut Option<u64>,
     parola: &mut Option<String>,
     hash: &mut String,
     iterasyon: &mut i32,
@@ -200,7 +253,7 @@ fn apply_config_defaults(
 }
 
 fn run_identity(
-    mut musteri_no: Option<u32>,
+    mut musteri_no: Option<u64>,
     mut parola: Option<String>,
     ozet_hex: Option<String>,
     zaman: Option<u64>,
@@ -241,7 +294,7 @@ fn run_identity(
 
 fn run_send(
     mut sunucu: Option<String>,
-    mut musteri_no: Option<u32>,
+    mut musteri_no: Option<u64>,
     mut parola: Option<String>,
     dosya: Option<String>,
     ozet_hex: Option<String>,
@@ -328,8 +381,14 @@ fn run_send(
                                     if let Some(signer) = vr.signer {
                                         println!("  İmzalayan: {}", signer);
                                     }
+                                    if let Some(expiry) = vr.cert_not_after {
+                                        println!("  Sertifika Son Kullanma Tarihi: {}", expiry.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                                    }
                                 } else {
                                     println!("Doğrulama başarısız: {}", vr.error.unwrap_or_default());
+                                    if let Some(expiry) = vr.cert_not_after {
+                                        println!("  Sertifika Son Kullanma Tarihi: {}", expiry.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -388,7 +447,7 @@ fn run_send(
 
 fn run_credits(
     mut sunucu: Option<String>,
-    mut musteri_no: Option<u32>,
+    mut musteri_no: Option<u64>,
     mut parola: Option<String>,
     mut iterasyon: i32,
     zaman: Option<u64>,
@@ -477,8 +536,14 @@ fn run_verify(dosya: String, json: bool) {
                 if let Some(signer) = vr.signer {
                     println!("  İmzalayan: {}", signer);
                 }
+                if let Some(expiry) = vr.cert_not_after {
+                    println!("  Sertifika Son Kullanma Tarihi: {}", expiry.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                }
             } else {
                 println!("Doğrulama başarısız: {}", vr.error.unwrap_or_default());
+                if let Some(expiry) = vr.cert_not_after {
+                    println!("  Sertifika Son Kullanma Tarihi: {}", expiry.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                }
             }
         }
         Err(e) => {
@@ -491,7 +556,7 @@ fn run_verify(dosya: String, json: bool) {
     }
 }
 
-fn run_save_config(sunucu: String, musteri_no: u32, parola: String, hash: String, iterasyon: i32) {
+fn run_save_config(sunucu: String, musteri_no: u64, parola: String, hash: String, iterasyon: i32) {
     if iterasyon < 1 {
         fatal("--iterasyon değeri en az 1 olmalıdır");
     }
@@ -559,4 +624,249 @@ fn run_update_certs(force: bool) {
         }
     }
 }
+
+fn run_read_cert(dosya: String, json: bool) {
+    let data = fs::read(&dosya).unwrap_or_else(|e| fatal(&format!("Sertifika dosyası okunamadı: {:?}", e)));
+    
+    match read_cert_details(&data) {
+        Ok(details) => {
+            if json {
+                print_json(&details);
+            } else {
+                println!("Sertifika Bilgileri:");
+                println!("  Konu (CN):              {}", details.subject);
+                println!("  Yayıncı (CN):           {}", details.issuer);
+                println!("  Başlangıç Tarihi:       {}", details.not_before.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                println!("  Bitiş (Son Kullanma):   {}", details.not_after.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                if details.is_valid {
+                    println!("  Durum:                  GEÇERLİ");
+                } else {
+                    println!("  Durum:                  GEÇERSİZ veya SÜRESİ DOLMUŞ");
+                }
+            }
+        }
+        Err(e) => {
+            if json {
+                print_json(&serde_json::json!({ "hata": e }));
+            } else {
+                fatal(&e);
+            }
+        }
+    }
+}
+
+fn run_eimza_info(modul: Option<String>, mut pin: Option<String>, json: bool) {
+    let module_path = modul.or_else(detect_pkcs11_module).unwrap_or_else(|| {
+        fatal("PKCS#11 sürücü modülü bulunamadı. Lütfen --modul parametresi ile sürücü yolunu (akisp11.dll/so/dylib) belirtin veya KAMUSM_PKCS11_MODULE çevre değişkenini tanımlayın.");
+    });
+
+    // İlk olarak kartları/slotları kontrol edelim
+    let tokens = match list_eimza_tokens(&module_path) {
+        Ok(t) => t,
+        Err(e) => fatal(&format!("E-İmza kartları listelenemedi: {}", e)),
+    };
+
+    if tokens.is_empty() {
+        if json {
+            print_json(&serde_json::json!({ "hata": "Takılı USB E-İmza (Akıllı Kart) bulunamadı." }));
+            std::process::exit(1);
+        } else {
+            fatal("Takılı USB E-İmza (Akıllı Kart) bulunamadı. Lütfen kartınızın takılı ve kart okuyucunuzun çalışır durumda olduğundan emin olun.");
+        }
+    }
+
+    // Eğer PIN verilmemişse ve interaktif istenecekse
+    if pin.is_none() && !json {
+        println!("Takılı E-İmza Kartları:");
+        for (i, t) in tokens.iter().enumerate() {
+            println!("  [{}] Slot: {}, Etiket: {}, Üretici: {}, Model: {}, Seri No: {}", 
+                     i, t.slot_id, t.label, t.manufacturer_id, t.model, t.serial_number);
+        }
+        
+        print!("Lütfen E-İmza PIN kodunu girin (Sertifikaları listelemek için, boş bırakabilirsiniz): ");
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        
+        let mut input_pin = String::new();
+        if std::io::stdin().read_line(&mut input_pin).is_ok() {
+            let trimmed = input_pin.trim();
+            if !trimmed.is_empty() {
+                pin = Some(trimmed.to_string());
+            }
+        }
+    }
+
+    match read_eimza_certs(&module_path, pin.as_deref()) {
+        Ok(results) => {
+            if json {
+                print_json(&results);
+            } else {
+                for r in results {
+                    println!("\nSlot: {} (Etiket: {})", r.token.slot_id, r.token.label);
+                    println!("Kart Bilgisi: {} {} (Seri No: {})", r.token.manufacturer_id, r.token.model, r.token.serial_number);
+                    if r.certificates.is_empty() {
+                        if pin.is_none() {
+                            println!("  [!] Sertifika bulunamadı. Karttaki sertifikaları okumak için PIN girmeniz gerekebilir.");
+                        } else {
+                            println!("  [!] Kartta okunabilir sertifika bulunamadı.");
+                        }
+                    } else {
+                        println!("Sertifikalar:");
+                        for (idx, cert) in r.certificates.iter().enumerate() {
+                            println!("  [{}] CN: {}", idx + 1, cert.subject);
+                            println!("       Yayıncı: {}", cert.issuer);
+                            println!("       Geçerlilik: {} - {}", 
+                                     cert.not_before.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"),
+                                     cert.not_after.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S"));
+                            if cert.is_valid {
+                                println!("       Durum:      GEÇERLİ");
+                            } else {
+                                println!("       Durum:      GEÇERSİZ veya SÜRESİ DOLMUŞ");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            if json {
+                print_json(&serde_json::json!({ "hata": e }));
+                std::process::exit(1);
+            } else {
+                fatal(&format!("E-İmza sertifikaları okunamadı: {}", e));
+            }
+        }
+    }
+}
+
+fn run_eimza_sign(
+    dosya: String,
+    xml: bool,
+    cikis: Option<String>,
+    mut pin: Option<String>,
+    modul: Option<String>,
+    json: bool,
+) {
+    let module_path = modul.or_else(detect_pkcs11_module).unwrap_or_else(|| {
+        fatal("PKCS#11 sürücü modülü bulunamadı. Lütfen --modul parametresi ile sürücü yolunu (akisp11.dll/so/dylib) belirtin veya KAMUSM_PKCS11_MODULE çevre değişkenini tanımlayın.");
+    });
+
+    // İlk olarak kartları/slotları kontrol edelim
+    let tokens = match list_eimza_tokens(&module_path) {
+        Ok(t) => t,
+        Err(e) => fatal(&format!("E-İmza kartları listelenemedi: {}", e)),
+    };
+
+    if tokens.is_empty() {
+        if json {
+            print_json(&serde_json::json!({ "hata": "Takılı USB E-İmza (Akıllı Kart) bulunamadı." }));
+            std::process::exit(1);
+        } else {
+            fatal("Takılı USB E-İmza (Akıllı Kart) bulunamadı. Lütfen kartınızın takılı ve kart okuyucunuzun çalışır durumda olduğundan emin olun.");
+        }
+    }
+
+    // Eğer PIN verilmemişse ve interaktif istenecekse
+    if pin.is_none() && !json {
+        println!("Takılı E-İmza Kartları:");
+        for (i, t) in tokens.iter().enumerate() {
+            println!("  [{}] Slot: {}, Etiket: {}, Üretici: {}, Model: {}, Seri No: {}", 
+                     i, t.slot_id, t.label, t.manufacturer_id, t.model, t.serial_number);
+        }
+        
+        print!("Lütfen E-İmza PIN kodunu girin: ");
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        
+        let mut input_pin = String::new();
+        if std::io::stdin().read_line(&mut input_pin).is_ok() {
+            let trimmed = input_pin.trim();
+            if !trimmed.is_empty() {
+                pin = Some(trimmed.to_string());
+            }
+        }
+    }
+
+    if pin.is_none() {
+        if json {
+            print_json(&serde_json::json!({ "hata": "PIN kodu gereklidir." }));
+            std::process::exit(1);
+        } else {
+            fatal("PIN kodu girilmedi.");
+        }
+    }
+
+    // Dosyayı oku
+    let data = fs::read(&dosya).unwrap_or_else(|e| fatal(&format!("Dosya okunamadı: {:?}", e)));
+
+    if xml {
+        match sign_eimza_xml(&module_path, pin.as_deref(), &data) {
+            Ok(signed_xml) => {
+                let out_path = cikis.unwrap_or_else(|| {
+                    let path = Path::new(&dosya);
+                    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+                    parent.join(format!("{}_imzali.xml", stem)).to_string_lossy().into_owned()
+                });
+
+                if let Err(e) = fs::write(&out_path, &signed_xml) {
+                    fatal(&format!("İmzalanmış XML dosyası yazılamadı: {:?}", e));
+                }
+
+                if json {
+                    print_json(&serde_json::json!({
+                        "basarili": true,
+                        "cikis_dosyasi": out_path,
+                        "format": "XML-DSig"
+                    }));
+                } else {
+                    println!("XML başarıyla imzalandı. Çıktı: {}", out_path);
+                }
+            }
+            Err(e) => {
+                if json {
+                    print_json(&serde_json::json!({ "hata": e }));
+                    std::process::exit(1);
+                } else {
+                    fatal(&format!("XML imzalama hatası: {}", e));
+                }
+            }
+        }
+    } else {
+        match sign_eimza_data(&module_path, pin.as_deref(), &data) {
+            Ok((sig_bytes, mechanism)) => {
+                let out_path = cikis.unwrap_or_else(|| {
+                    format!("{}.sig", dosya)
+                });
+
+                if let Err(e) = fs::write(&out_path, &sig_bytes) {
+                    fatal(&format!("İmza dosyası yazılamadı: {:?}", e));
+                }
+
+                if json {
+                    print_json(&serde_json::json!({
+                        "basarili": true,
+                        "cikis_dosyasi": out_path,
+                        "format": "Raw",
+                        "mekanizma": mechanism,
+                        "imza_boyutu": sig_bytes.len()
+                    }));
+                } else {
+                    println!("Veri başarıyla imzalandı (Mekanizma: {}). İmza dosyası: {}", mechanism, out_path);
+                }
+            }
+            Err(e) => {
+                if json {
+                    print_json(&serde_json::json!({ "hata": e }));
+                    std::process::exit(1);
+                } else {
+                    fatal(&format!("İmzalama hatası: {}", e));
+                }
+            }
+        }
+    }
+}
+
+
+
 

@@ -5,11 +5,15 @@ pub mod crypto;
 pub mod identity;
 pub mod tsa;
 pub mod verify;
+pub mod eimza;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Re-exports
-pub use certs::{kamusm_root_cas, update_certs, auto_update_certs, certs_cache_path};
+pub use certs::{kamusm_root_cas, update_certs, auto_update_certs, certs_cache_path, read_cert_details, CertDetails};
+pub use eimza::{detect_pkcs11_module, list_eimza_tokens, read_eimza_certs, sign_eimza_data, sign_eimza_xml, EImzaTokenInfo, EImzaResult};
+
+
 
 pub use client::{send_credit_request, send_timestamp_request};
 pub use config::{ConfigData, load_config, save_config, config_path, mask_password};

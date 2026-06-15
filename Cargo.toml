@@ -30,6 +30,7 @@ secrecy = "0.10"
 libloading = "0.8"
 xml-canonicalization = "0.1.2"
 xmltree = "0.12.0"
+rpassword = "7.3"
 
 
 

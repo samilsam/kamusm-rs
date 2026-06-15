@@ -683,12 +683,7 @@ fn run_eimza_info(modul: Option<String>, mut pin: Option<String>, json: bool) {
                      i, t.slot_id, t.label, t.manufacturer_id, t.model, t.serial_number);
         }
         
-        print!("Lütfen E-İmza PIN kodunu girin (Sertifikaları listelemek için, boş bırakabilirsiniz): ");
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
-        
-        let mut input_pin = String::new();
-        if std::io::stdin().read_line(&mut input_pin).is_ok() {
+        if let Ok(input_pin) = rpassword::prompt_password("Lütfen E-İmza PIN kodunu girin (Sertifikaları listelemek için, boş bırakabilirsiniz): ") {
             let trimmed = input_pin.trim();
             if !trimmed.is_empty() {
                 pin = Some(trimmed.to_string());
@@ -774,12 +769,7 @@ fn run_eimza_sign(
                      i, t.slot_id, t.label, t.manufacturer_id, t.model, t.serial_number);
         }
         
-        print!("Lütfen E-İmza PIN kodunu girin: ");
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
-        
-        let mut input_pin = String::new();
-        if std::io::stdin().read_line(&mut input_pin).is_ok() {
+        if let Ok(input_pin) = rpassword::prompt_password("Lütfen E-İmza PIN kodunu girin: ") {
             let trimmed = input_pin.trim();
             if !trimmed.is_empty() {
                 pin = Some(trimmed.to_string());

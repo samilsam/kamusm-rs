@@ -1,0 +1,10 @@
+[[permission]]
+identifier = "allow-all-commands"
+description = "Allows all custom app commands"
+commands.allow = [
+  "list_tokens",
+  "login_with_eimza",
+  "sign_file",
+  "verify_file",
+  "select_file"
+]

@@ -21,7 +21,8 @@ pub use identity::build_identity;
 pub use tsa::{compute_file_digest, build_tsa_request};
 pub use verify::{
     is_valid_timestamp_response, extract_pkcs7, extract_text_from_asn1,
-    parse_credits_from_body, verify_timestamp, VerifyResult
+    parse_credits_from_body, verify_timestamp, VerifyResult,
+    verify_eimza_xml, verify_eimza_detached
 };
 
 #[cfg(test)]

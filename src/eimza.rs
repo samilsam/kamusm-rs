@@ -13,26 +13,38 @@ static LOADED_LIBS: OnceLock<Mutex<Vec<Library>>> = OnceLock::new();
 
 /// Manually calls C_Initialize(NULL_PTR) on a PKCS#11 library using libloading.
 /// This is required for drivers like akisp11.dll which reject non-null pInitArgs with CKR_ARGUMENTS_BAD.
-pub fn init_pkcs11_library_manually(module_path: &str) -> Result<(), String> {
-    unsafe {
-        let lib = Library::new(module_path)
-            .map_err(|e| format!("Kütüphane yüklenemedi: {:?}", e))?;
-        
-        let c_initialize: libloading::Symbol<unsafe extern "C" fn(*mut std::ffi::c_void) -> usize> = lib.get(b"C_Initialize")
-            .map_err(|e| format!("C_Initialize sembolü bulunamadı: {:?}", e))?;
-        
-        let rv = c_initialize(std::ptr::null_mut());
-        
-        // 0 is CKR_OK, 0x00000191 is CKR_CRYPTOKI_ALREADY_INITIALIZED
-        if rv != 0 && rv != 0x00000191 {
-            return Err(format!("C_Initialize başarısız (Hata Kodu: 0x{:X})", rv));
-        }
+static MANUALLY_INITIALIZED: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
 
-        // Store the library to keep it resident in memory
-        let libs_mutex = LOADED_LIBS.get_or_init(|| Mutex::new(Vec::<Library>::new()));
-        if let Ok(mut libs) = libs_mutex.lock() {
-            libs.push(lib);
+pub fn init_pkcs11_library_manually(module_path: &str) -> Result<(), String> {
+    let initialized_set = MANUALLY_INITIALIZED.get_or_init(|| Mutex::new(std::collections::HashSet::new()));
+    
+    if let Ok(mut set) = initialized_set.lock() {
+        if set.contains(module_path) {
+            return Ok(());
         }
+        
+        unsafe {
+            let lib = Library::new(module_path)
+                .map_err(|e| format!("Kütüphane yüklenemedi: {:?}", e))?;
+            
+            let c_initialize: libloading::Symbol<unsafe extern "C" fn(*mut std::ffi::c_void) -> usize> = lib.get(b"C_Initialize")
+                .map_err(|e| format!("C_Initialize sembolü bulunamadı: {:?}", e))?;
+            
+            let rv = c_initialize(std::ptr::null_mut());
+            
+            // 0 is CKR_OK, 0x00000191 is CKR_CRYPTOKI_ALREADY_INITIALIZED
+            if rv != 0 && rv != 0x00000191 {
+                return Err(format!("C_Initialize başarısız (Hata Kodu: 0x{:X})", rv));
+            }
+
+            // Store the library to keep it resident in memory
+            let libs_mutex = LOADED_LIBS.get_or_init(|| Mutex::new(Vec::<Library>::new()));
+            if let Ok(mut libs) = libs_mutex.lock() {
+                libs.push(lib);
+            }
+        }
+        
+        set.insert(module_path.to_string());
     }
     Ok(())
 }
@@ -409,16 +421,15 @@ pub fn sign_eimza_xml(
 ) -> Result<String, String> {
     let ctx = open_eimza_signing_session(module_path, pin)?;
 
-    // Parse the original XML
-    let xml_str = std::str::from_utf8(xml_content)
-        .map_err(|e| format!("Geçersiz UTF-8 XML verisi: {:?}", e))?;
+    // Parse the original XML with encoding detection
+    let xml_str = crate::verify::decode_xml_content(xml_content)?;
     
-    let mut root = Element::parse(xml_content)
+    let mut root = Element::parse(xml_str.as_bytes())
         .map_err(|e| format!("XML ayrıştırılamadı: {:?}", e))?;
 
     // Canonicalize the original XML
     let mut original_canon = Vec::new();
-    Canonicalizer::read_from_str(xml_str)
+    Canonicalizer::read_from_str(&xml_str)
         .write_to_writer(Cursor::new(&mut original_canon))
         .canonicalize(true)
         .map_err(|e| format!("Kanonikalizasyon hatası: {:?}", e))?;

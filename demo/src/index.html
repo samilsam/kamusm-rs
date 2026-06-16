@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kamu SM E-İmza Demo İstemcisi</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <div class="app-container">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <div>
+          <div class="logo-section">
+            <div class="logo-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </div>
+            <span class="logo-text">Kamu SM E-İmza</span>
+          </div>
+
+          <ul class="nav-links">
+            <li class="nav-item">
+              <button class="nav-button active" data-tab="tab-login">
+                <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                Giriş Yap
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-button disabled" id="nav-profile" data-tab="tab-profile">
+                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>
+                Kullanıcı Bilgileri
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-button disabled" id="nav-sign" data-tab="tab-sign">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Dosya İmzala
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-button" data-tab="tab-verify">
+                <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                İmza Doğrula
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-footer">
+          kamusm-rs v1.2.0 • 2026
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+        
+        <!-- Tab 1: Login -->
+        <section id="tab-login" class="tab-pane active">
+          <h2 class="view-title">E-İmza ile Giriş Yap</h2>
+          <p class="view-subtitle">USB Akıllı Kart okuyucunuzu bilgisayara bağlayıp giriş yapın.</p>
+          
+          <div class="form-group">
+            <label class="form-label" for="select-tokens">Takılı Akıllı Kart (E-İmza)</label>
+            <div class="file-input-row">
+              <select id="select-tokens" class="select-input">
+                <option value="">Kart taranıyor...</option>
+              </select>
+              <button id="btn-refresh-tokens" class="btn-icon" title="Kartları Yeniden Tara">
+                <svg viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l.73-.73"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="input-pin">Akıllı Kart PIN Kodu</label>
+            <div class="input-container">
+              <input id="input-pin" type="password" class="text-input" placeholder="Akıllı Kart PIN kodunu girin..." />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 32px;">
+            <button id="btn-login" class="btn btn-primary" style="width: 100%;">Giriş Yap ve Sertifikaları Oku</button>
+          </div>
+
+          <div id="login-status-container"></div>
+        </section>
+
+        <!-- Tab 2: Profile -->
+        <section id="tab-profile" class="tab-pane">
+          <h2 class="view-title">E-İmza Kullanıcı Bilgileri</h2>
+          <p class="view-subtitle">Takılı akıllı kart donanımı ve sertifika geçerlilik bilgileri.</p>
+
+          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: hsl(263, 90%, 80%); letter-spacing: 0.5px; text-transform: uppercase;">Kişisel Bilgiler</h3>
+          <div class="info-grid" style="margin-bottom: 32px;">
+            <div class="info-card">
+              <span class="info-card-label">Ad Soyad</span>
+              <span class="info-card-value" id="user-fullname">-</span>
+            </div>
+            <div class="info-card">
+              <span class="info-card-label">T.C. Kimlik No</span>
+              <span class="info-card-value" id="user-tckn">-</span>
+            </div>
+          </div>
+
+          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: hsl(263, 90%, 80%); letter-spacing: 0.5px; text-transform: uppercase;">Kart Donanım Bilgileri</h3>
+          <div class="info-grid" style="margin-bottom: 32px;">
+            <div class="info-card">
+              <span class="info-card-label">Kart Üreticisi</span>
+              <span class="info-card-value" id="card-manufacturer">-</span>
+            </div>
+            <div class="info-card">
+              <span class="info-card-label">Kart Modeli</span>
+              <span class="info-card-value" id="card-model">-</span>
+            </div>
+            <div class="info-card">
+              <span class="info-card-label">Seri Numarası</span>
+              <span class="info-card-value" id="card-serial">-</span>
+            </div>
+            <div class="info-card">
+              <span class="info-card-label">Etiket</span>
+              <span class="info-card-value" id="card-label">-</span>
+            </div>
+          </div>
+
+          <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Sertifika Detayları</h3>
+          <div class="table-container">
+            <table class="info-table">
+              <thead>
+                <tr>
+                  <th>Konu (CN)</th>
+                  <th>Yayıncı (CA)</th>
+                  <th>Başlangıç Tarihi</th>
+                  <th>Bitiş (Son Kullanma)</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody id="cert-table-body">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">Sertifika bilgisi bulunmamaktadır.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div id="expiry-warning-container" style="margin-top: 24px;"></div>
+        </section>
+
+        <!-- Tab 3: Sign -->
+        <section id="tab-sign" class="tab-pane">
+          <h2 class="view-title">Dosya İmzalama</h2>
+          <p class="view-subtitle">İmzalamak istediğiniz dosyayı seçin ve e-imzanız ile güvenli bir şekilde imzalayın.</p>
+
+          <div class="form-group">
+            <label class="form-label">İmza Formatı</label>
+            <div class="option-toggle-group" id="sign-format-toggle">
+              <button class="toggle-option active" data-value="xml">XML Enveloped (XML-DSig)</button>
+              <button class="toggle-option" data-value="raw">Detached / Raw Signature (.sig)</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="input-sign-file">İmzalanacak Dosya</label>
+            <div class="file-input-row">
+              <input id="input-sign-file" type="text" class="text-input" readonly placeholder="Lütfen bir dosya seçin..." />
+              <button id="btn-browse-sign" class="btn-icon" title="Dosya Seç">
+                <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 32px;">
+            <button id="btn-sign" class="btn btn-primary" style="width: 100%;">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;">
+                <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+              Dosyayı Güvenli Olarak İmzala
+            </button>
+          </div>
+
+          <div id="sign-status-container"></div>
+        </section>
+
+        <!-- Tab 4: Verify -->
+        <section id="tab-verify" class="tab-pane">
+          <h2 class="view-title">E-İmza Doğrulama</h2>
+          <p class="view-subtitle">İmzalanmış dosyaların imza bütünlüğünü ve sertifika geçerliliğini doğrulayın.</p>
+
+          <div class="form-group">
+            <label class="form-label">İmza Formatı</label>
+            <div class="option-toggle-group" id="verify-format-toggle">
+              <button class="toggle-option active" data-value="xml">XML Enveloped (XML-DSig)</button>
+              <button class="toggle-option" data-value="raw">Detached / Raw Signature (.sig)</button>
+            </div>
+          </div>
+
+          <!-- XML Verification Block -->
+          <div id="verify-xml-block">
+            <div class="form-group">
+              <label class="form-label" for="input-verify-xml-file">İmzalı XML Dosyası</label>
+              <div class="file-input-row">
+                <input id="input-verify-xml-file" type="text" class="text-input" readonly placeholder="Lütfen imzalı XML dosyasını seçin..." />
+                <button id="btn-browse-verify-xml" class="btn-icon" title="Dosya Seç">
+                  <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Raw / Detached Verification Block -->
+          <div id="verify-raw-block" style="display: none;">
+            <div class="form-group">
+              <label class="form-label" for="input-verify-raw-orig">Orijinal Dosya</label>
+              <div class="file-input-row">
+                <input id="input-verify-raw-orig" type="text" class="text-input" readonly placeholder="İmzasız orijinal dosyayı seçin..." />
+                <button id="btn-browse-verify-raw-orig" class="btn-icon" title="Orijinal Dosyayı Seç">
+                  <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-verify-raw-sig">İmza Dosyası (.sig)</label>
+              <div class="file-input-row">
+                <input id="input-verify-raw-sig" type="text" class="text-input" readonly placeholder="Oluşturulan imza dosyasını (.sig) seçin..." />
+                <button id="btn-browse-verify-raw-sig" class="btn-icon" title="İmza Dosyasını Seç">
+                  <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-verify-raw-cert">İmzalayanın Sertifikası (.pem / .der / .crt)</label>
+              <div class="file-input-row">
+                <input id="input-verify-raw-cert" type="text" class="text-input" readonly placeholder="İmzalayan kişinin sertifikasını seçin..." />
+                <button id="btn-browse-verify-raw-cert" class="btn-icon" title="Sertifikayı Seç">
+                  <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 32px;">
+            <button id="btn-verify" class="btn btn-primary" style="width: 100%;">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;">
+                <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+              </svg>
+              İmzayı ve Sertifikayı Doğrula
+            </button>
+          </div>
+
+          <div id="verify-status-container"></div>
+        </section>
+
+      </main>
+    </div>
+  </body>
+</html>

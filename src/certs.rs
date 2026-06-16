@@ -312,6 +312,10 @@ pub struct CertDetails {
     pub not_after: chrono::DateTime<chrono::Utc>,
     #[serde(rename = "gecerli")]
     pub is_valid: bool,
+    #[serde(rename = "ad_soyad")]
+    pub ad_soyad: Option<String>,
+    #[serde(rename = "tc_no")]
+    pub tc_no: Option<String>,
 }
 
 pub fn read_cert_details(bytes: &[u8]) -> Result<CertDetails, String> {
@@ -325,12 +329,65 @@ pub fn read_cert_details(bytes: &[u8]) -> Result<CertDetails, String> {
     let not_after = cert.validity_not_after();
     let is_valid = cert.time_constraints_valid(None);
 
+    let mut ad_soyad = None;
+    let mut tc_no = None;
+
+    // Subject Name RDN'lerinden Ad Soyad (CN) ve T.C. Kimlik No (SerialNumber) ayıkla
+    for rdn in cert.subject_name().iter() {
+        for attr in rdn.iter() {
+            let oid_bytes = attr.typ.as_ref();
+            let value_bytes = attr.value.as_slice();
+            if value_bytes.len() >= 2 {
+                let len_byte = value_bytes[1];
+                let mut offset = 2;
+                let length = if len_byte & 0x80 == 0 {
+                    len_byte as usize
+                } else {
+                    let num_bytes = (len_byte & 0x7F) as usize;
+                    let mut l = 0usize;
+                    if offset + num_bytes <= value_bytes.len() {
+                        for &b in &value_bytes[offset .. offset + num_bytes] {
+                            l = (l << 8) | (b as usize);
+                        }
+                        offset += num_bytes;
+                    }
+                    l
+                };
+                if offset + length <= value_bytes.len() {
+                    let string_bytes = &value_bytes[offset .. offset + length];
+                    if let Ok(s) = std::str::from_utf8(string_bytes) {
+                        let val = s.trim().to_string();
+                        if oid_bytes == &[0x55, 0x04, 0x03] {
+                            // CN: Common Name
+                            ad_soyad = Some(val);
+                        } else if oid_bytes == &[0x55, 0x04, 0x05] {
+                            // Serial Number: E-İmza sertifikalarında T.C. Kimlik No bu alandadır.
+                            // Başındaki TR ibaresi varsa temizlenir.
+                            let cleaned = if val.starts_with("TR") {
+                                val.trim_start_matches("TR").to_string()
+                            } else {
+                                val
+                            };
+                            tc_no = Some(cleaned);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if ad_soyad.is_none() && subject != "Bilinmeyen Konu" {
+        ad_soyad = Some(subject.clone());
+    }
+
     Ok(CertDetails {
         subject,
         issuer,
         not_before,
         not_after,
         is_valid,
+        ad_soyad,
+        tc_no,
     })
 }
 
@@ -387,8 +444,6 @@ mod tests {
             let cert = CapturedX509Certificate::from_pem(pem_str.as_bytes()).unwrap();
             let common_name = cert.subject_common_name().unwrap_or_default();
             
-            println!("--- {} ---", name);
-            println!("Common Name: {}", common_name);
             println!("SHA-256: {}", hex::encode(sha256_hash));
             println!("SHA-1:   {}", hex::encode(sha1_hash));
         }

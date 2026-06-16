@@ -11,7 +11,7 @@ Tamamen Rust dilinde yazılmıştır, Windows, Linux ve macOS platformlarında h
 Kaynak koddan derleyerek kurmak için:
 
 ```bash
-git clone https://github.com/KilimcininKorOglu/kamusm-rs.git
+git clone https://github.com/zinderud/kamusm-rs.git
 cd kamusm-rs
 cargo install --path .
 ```
@@ -24,7 +24,7 @@ Rust projenize `Cargo.toml` üzerinden bağımlılık olarak ekleyebilirsiniz:
 
 ```toml
 [dependencies]
-kamusm_rs = { git = "https://github.com/KilimcininKorOglu/kamusm-rs.git" }
+kamusm_rs = { git = "https://github.com/zinderud/kamusm-rs.git" }
 ```
 
 ---

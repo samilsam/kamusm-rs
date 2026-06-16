@@ -16,7 +16,7 @@ fn common_headers(identity: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/timestamp-query"));
     
-    let ua = format!("KilimcininKorOglu/kamusm-rs/{}", env!("CARGO_PKG_VERSION"));
+    let ua = format!("zinderud/kamusm-rs/{}", env!("CARGO_PKG_VERSION"));
     if let Ok(val) = HeaderValue::from_str(&ua) {
         headers.insert(USER_AGENT, val);
     }
